@@ -168,3 +168,14 @@
     font-size: 0.87rem;
   }
 }
+
+/* Theme toggle button styling */
+.theme-toggle-btn {
+  outline: none;
+  box-shadow: 0 2px 8px #007bff18;
+}
+.theme-toggle-btn:hover, .theme-toggle-btn:active {
+  filter: brightness(1.09);
+  background: var(--input-bg);
+}
+/* End theme toggle button */

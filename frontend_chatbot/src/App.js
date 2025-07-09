@@ -1,12 +1,40 @@
 import React, { useState, useRef, useEffect } from "react";
 import "./App.css";
 
+// PUBLIC_INTERFACE
+/**
+ * App-wide theme toggle. Switch between light and dark, persist via localStorage and html attr.
+ */
+function useTheme() {
+  const [theme, setTheme] = useState(() => {
+    // Try to load from localStorage, fallback to prefers-color-scheme, default light
+    const stored = window.localStorage.getItem("theme");
+    if (stored) return stored;
+    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      return "dark";
+    }
+    return "light";
+  });
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    window.localStorage.setItem("theme", theme);
+  }, [theme]);
+  // PUBLIC_INTERFACE
+  function toggleTheme() {
+    setTheme((th) => (th === "light" ? "dark" : "light"));
+  }
+  return [theme, toggleTheme];
+}
+
 /**
  * PUBLIC_INTERFACE
  * Chatbot app: Minimal light-themed UI; independent from other frontend apps.
  * Components: Chat history, user input, placeholder response (not connected to backend).
  */
 function App() {
+  // THEME HOOK
+  const [theme, toggleTheme] = useTheme();
+
   // State holds history as {sender: "user"|"bot", text: "..." }
   const [history, setHistory] = useState([
     { sender: "bot", text: "Hi! I’m your AI assistant. How can I help you today?" }
@@ -50,9 +78,41 @@ function App() {
   return (
     <div className="chatbot-outer">
       <div className="chatbot-card">
-        <header className="chatbot-header">
+        <header className="chatbot-header" style={{ position: 'relative' }}>
           <span className="chatbot-icon" aria-label="Chatbot">💬</span>
           <span className="chatbot-title">AI Chatbot</span>
+          {/* Theme toggle button */}
+          <button
+            className="theme-toggle-btn"
+            aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
+            title={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
+            onClick={toggleTheme}
+            style={{
+              position: "absolute",
+              right: 12, top: 14, zIndex: 1,
+              background: "var(--surface)",
+              border: `1.2px solid var(--border)`,
+              borderRadius: 8,
+              color: "var(--primary)",
+              fontWeight: 600,
+              fontSize: 18,
+              padding: "3px 13px 3px 8px",
+              cursor: "pointer",
+              boxShadow: "0 1px 7px #0069be0a",
+              transition: "filter 0.2s"
+            }}
+          >
+            {theme === "light" ? (
+              <span role="img" aria-label="Switch to dark mode">🌙</span>
+            ) : (
+              <span role="img" aria-label="Switch to light mode">☀️</span>
+            )}
+            <span style={{
+              marginLeft: 5,
+              fontSize: 13,
+              verticalAlign: "middle"
+            }}>{theme === "light" ? "Dark" : "Light"}</span>
+          </button>
         </header>
         <main className="chatbot-history" aria-live="polite">
           {history.map((msg, idx) => (
@@ -98,6 +158,9 @@ function App() {
       <footer className="chatbot-footer">
         <span>
           <b style={{ color: "var(--primary)" }}>KAVIA Demo</b> &middot; AI Chatbot
+          <span aria-hidden="true" style={{ marginLeft: 6, opacity: 0.55 }}>
+            · {theme.charAt(0).toUpperCase()+theme.slice(1)} theme
+          </span>
         </span>
       </footer>
     </div>
