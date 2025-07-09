@@ -1,66 +1,69 @@
 import React, { useState, useEffect } from "react";
 import "./App.css";
 
-// Theme and styling color palette (from config and CSS vars)
+/**
+ * Kid$mart: A Business Board Game for Kids
+ * - Move around the board, earn or spend money at different tiles,
+ * - Buy simple items, goal is to finish with the most savings!
+ * - Playable Solo (vs simple AI) or Two-Player (local hot-seat).
+ */
+
+// Style palette and color constants
 const COLORS = {
-  primary: '#007bff',
-  secondary: '#6c757d',
-  accent: '#28a745'
+  primary: "#007bff",
+  secondary: "#6c757d",
+  accent: "#28a745",
+  bgIncome: "#e8f6e4",
+  bgExpense: "#faf0e6",
+  bgShop: "#fff3cd"
 };
 
-const BOARD_SIZE = 30; // Winning position
-const DICE_SIDES = 6;
-const SNAKES = {
-  14: 4,
-  19: 8,
-  22: 20,
-  24: 16
-};
-const LADDERS = {
-  3: 15,
-  6: 12,
-  11: 26,
-  17: 21
-};
-const SOLO_AI_DELAY = 900; // ms
+// Board tile definitions
+const BOARD = [
+  { type: "start", label: "Start", info: "Collect $10 on each lap!" },
+  { type: "income", label: "🎉 Allowance!", amount: 10, info: "+$10" },
+  { type: "expense", label: "🍦 Treats", amount: -4, info: "-$4" },
+  { type: "shop", label: "🛍️ ToyShop", price: 7, item: "Toy", info: "Buy Toy $7" },
+  { type: "income", label: "🎁 Gift", amount: 6, info: "+$6" },
+  { type: "expense", label: "🚌 Bus Fare", amount: -2, info: "-$2" },
+  { type: "income", label: "💼 Odd Job", amount: 8, info: "+$8" },
+  { type: "shop", label: "🧃 SnackBar", price: 3, item: "Snack", info: "Buy Snack $3" },
+  { type: "expense", label: "📚 Book", amount: -5, info: "-$5" },
+  { type: "income", label: "🏆 Prize", amount: 5, info: "+$5" },
+];
 
-// Helper to get square color for the board (minimally styled, alternating accent/secondary)
-function getSquareColor(index) {
-  return index % 2 === 0
-    ? `var(--bg-secondary,${COLORS.secondary})`
-    : `var(--border-color,${COLORS.accent})`;
-}
+const BOARD_LENGTH = BOARD.length;
+const INITIAL_MONEY = 15;
+const WINNING_LAPS = 2; // How many laps ends the game
 
 // PUBLIC_INTERFACE
 function App() {
-  // Theme
+  // Theme management
   const [theme, setTheme] = useState("light");
-  // Game state
-  const [positions, setPositions] = useState([0, 0]);
-  const [scores, setScores] = useState([0, 0]);
-  const [turn, setTurn] = useState(0); // 0: Player 1, 1: Player 2/AI
+
+  // Game State
+  const [positions, setPositions] = useState([0, 0]); // player positions on board
+  const [money, setMoney] = useState([INITIAL_MONEY, INITIAL_MONEY]);
+  const [items, setItems] = useState([[], []]); // player inventories
+  const [laps, setLaps] = useState([0, 0]);
+  const [turn, setTurn] = useState(0); // 0 - P1, 1 - P2/AI
   const [dice, setDice] = useState(null);
-  const [message, setMessage] = useState("Welcome to Snake and Dice!");
+  const [message, setMessage] = useState("Welcome to Kid$mart!");
   const [gameOver, setGameOver] = useState(false);
   const [vsAI, setVsAI] = useState(false);
 
-  // Effect to set CSS theme
+  // Set theme on mount/update
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
-  // Effect for AI move (solo mode)
+  // AI turn effect
   useEffect(() => {
-    if (
-      vsAI &&
-      !gameOver &&
-      turn === 1
-    ) {
-      // Let AI roll after human's move.
-      const aiTimer = setTimeout(() => {
-        rollDice();
-      }, SOLO_AI_DELAY);
-      return () => clearTimeout(aiTimer);
+    if (vsAI && !gameOver && turn === 1) {
+      const t = setTimeout(() => {
+        handleRoll();
+      }, 900);
+      return () => clearTimeout(t);
     }
   }, [vsAI, turn, gameOver]);
 
@@ -72,158 +75,240 @@ function App() {
   // PUBLIC_INTERFACE
   function resetGame() {
     setPositions([0, 0]);
-    setScores([0, 0]);
+    setMoney([INITIAL_MONEY, INITIAL_MONEY]);
+    setItems([[], []]);
+    setLaps([0, 0]);
     setTurn(0);
-    setGameOver(false);
     setDice(null);
-    setMessage("Game restarted. 🎲");
+    setMessage("Game reset. Good luck!");
+    setGameOver(false);
   }
 
   // PUBLIC_INTERFACE
   function startSoloMode() {
     setVsAI(true);
     resetGame();
-    setMessage("Solo mode: You vs AI. Good luck!");
+    setMessage("Solo mode: You vs KidBot!");
   }
 
   // PUBLIC_INTERFACE
   function startTwoPlayerMode() {
     setVsAI(false);
     resetGame();
-    setMessage("Two Player mode: P1 and P2, let's roll!");
+    setMessage("Two-Player mode: Take turns and learn!");
   }
 
-  // Handle dice roll and move logic
   // PUBLIC_INTERFACE
-  function rollDice() {
+  function handleRoll() {
     if (gameOver) return;
-    const diceRoll = Math.floor(Math.random() * DICE_SIDES) + 1;
-    setDice(diceRoll);
+    const roll = Math.floor(Math.random() * 6) + 1;
+    setDice(roll);
 
-    const currPos = positions[turn];
-    let nextPos = currPos + diceRoll;
+    let newPositions = [...positions];
+    let newLaps = [...laps];
+    let player = turn;
+    let newPos = newPositions[player] + roll;
 
-    let moveMessage = `Player ${turn === 0 ? "1" : (vsAI ? "AI" : "2")} rolled a ${diceRoll}. `;
+    let didLap = false;
+    if (newPos >= BOARD_LENGTH) {
+      newPos = newPos % BOARD_LENGTH;
+      newLaps[player] += 1;
+      didLap = true;
+    }
+    newPositions[player] = newPos;
+    let lapMsg = didLap ? " - Completed a lap! (+$10)" : "";
 
-    // Check for overshoot: must land exactly at BOARD_SIZE
-    if (nextPos > BOARD_SIZE) {
-      moveMessage += "Overshot! Stay in place.";
-      updateStateAfterMove(currPos, turn, moveMessage, false);
+    // Process board tile
+    const square = BOARD[newPos];
+    let newMoney = [...money];
+    let newItems = [ [...items[0]], [...items[1]] ];
+    let squareMsg = "";
+
+    if (didLap) {
+      newMoney[player] += 10; // Collect lap money
+    }
+
+    if (square.type === "income") {
+      newMoney[player] += square.amount;
+      squareMsg = `Found ${square.label} (+$${square.amount})!`;
+    }
+    else if (square.type === "expense") {
+      newMoney[player] = Math.max(0, newMoney[player] + square.amount);
+      squareMsg = `Paid for ${square.label} (${-square.amount} spent).`;
+    }
+    else if (square.type === "shop") {
+      // For AI: 70% chance to buy if affordable, for human ask to buy
+      if (vsAI && player === 1) {
+        if (newMoney[1] >= square.price && Math.random() < 0.7) {
+          newMoney[1] -= square.price;
+          newItems[1].push(square.item);
+          squareMsg = `KidBot bought a ${square.item}!`;
+        } else {
+          squareMsg = `KidBot skipped the shop.`;
+        }
+      } else if (!vsAI || player === 0) {
+        if (newMoney[player] >= square.price) {
+          // Offer to buy
+          setTimeout(() => {
+            if (window.confirm(`Buy ${square.item} for $${square.price}?`)) {
+              const updItems = [ [...newItems[0]], [...newItems[1]] ];
+              updItems[player].push(square.item);
+              const updMoney = [...newMoney];
+              updMoney[player] -= square.price;
+              setItems(updItems);
+              setMoney(updMoney);
+              setMessage(`Bought ${square.item}${lapMsg && "!"}`);
+            } else {
+              setMessage(`You skipped the shop. ${lapMsg}`);
+            }
+          }, 100);
+          // Pause, skip normal flow for shop prompt (to avoid state split)
+          switchTurnAfterDelay(newPositions, newLaps, newMoney, newItems, player, lapMsg ? "Lap completed!" : "", true, didLap);
+          return;
+        } else {
+          squareMsg = `Not enough to buy at the shop.`;
+        }
+      }
+    } else if (square.type === "start") {
+      // Nothing, just the start tile
+      squareMsg = `Passing Start!`;
+    }
+
+    // Apply changes
+    setPositions(newPositions);
+    setLaps(newLaps);
+    setMoney(newMoney);
+    setItems(newItems);
+
+    // Check for WIN
+    let winner = null;
+    if (newLaps[player] >= WINNING_LAPS) {
+      winner = 
+        newMoney[0] > newMoney[1]
+          ? "Player 1"
+          : newMoney[0] < newMoney[1]
+          ? (vsAI ? "KidBot" : "Player 2")
+          : "Tie";
+      setGameOver(true);
+      setMessage(
+        `Game Over! ${winner === "Tie" ? "It's a tie! 🥇" : `${winner} wins with the most savings!`}`
+      );
       return;
     }
 
-    // Ladders
-    if (LADDERS[nextPos]) {
-      moveMessage += `Ladder up from ${nextPos} to ${LADDERS[nextPos]}! `;
-      nextPos = LADDERS[nextPos];
-    }
-    // Snakes
-    if (SNAKES[nextPos]) {
-      moveMessage += `Oh no, snake! Down from ${nextPos} to ${SNAKES[nextPos]}. `;
-      nextPos = SNAKES[nextPos];
-    }
-
-    // Check win
-    let isWin = false;
-    if (nextPos === BOARD_SIZE) {
-      moveMessage += `🎉 Player ${turn === 0 ? "1" : (vsAI ? "AI" : "2")} wins!`;
-      isWin = true;
-    }
-
-    updateStateAfterMove(nextPos, turn, moveMessage, isWin);
-  }
-
-  function updateStateAfterMove(nextPos, player, msg, didWin) {
-    const newPositions = [...positions];
-    newPositions[player] = nextPos;
-
-    const newScores =
-      nextPos === positions[player]
-        ? scores
-        : scores.map((s, idx) =>
-            idx === player ? s + 1 : s
-          );
-
-    setPositions(newPositions);
-    setScores(newScores);
+    // Compose message
+    const playerLabel = player === 0 ? "Player 1" : vsAI ? "KidBot" : "Player 2";
+    const msg = `${playerLabel} rolled ${roll}. ${squareMsg} ${lapMsg}`;
     setMessage(msg);
-    setGameOver(didWin);
 
-    if (!didWin) {
-      setTurn((prev) => (prev === 0 ? 1 : 0));
-    }
+    // Advance turn
+    switchTurnAfterDelay(newPositions, newLaps, newMoney, newItems, player, msg, false, didLap);
   }
 
-  // Helper: render board squares with snakes/ladders
+  // Helper: Advance turn after short delay for smooth flow
+  function switchTurnAfterDelay(pos, laps, money, items, cur, msg, skipTurn, justLapped) {
+    setTimeout(() => {
+      if (gameOver) return;
+      if (!skipTurn) {
+        setTurn((cur) => (cur === 0 ? 1 : 0));
+      }
+    }, justLapped ? 650 : 350);
+  }
+
+  // Board rendering
   function renderBoard() {
-    const squares = [];
-    // Board: 5x6 grid for 30 squares (label from 1 - BOARD_SIZE)
-    for (let i = 1; i <= BOARD_SIZE; ++i) {
-      // Player markers
-      const p1 = positions[0] === i ? "🟧" : "";
-      const p2 = positions[1] === i ? (vsAI ? "🤖" : "🟩") : "";
-      // Snake/ladder
-      let label = i;
-      if (LADDERS[i]) label = `⬆️${i}`;
-      if (SNAKES[i]) label = `🐍${i}`;
-      squares.push(
-        <div
-          key={i}
-          style={{
-            background: getSquareColor(i),
-            border: `1px solid var(--border-color,${COLORS.primary})`,
-            color:
-              LADDERS[i]
-                ? COLORS.accent
-                : SNAKES[i]
-                  ? COLORS.primary
-                  : "inherit",
-            fontWeight: LADDERS[i] || SNAKES[i] ? "bold" : "normal",
-            borderRadius: "8px",
-            padding: 0,
-            position: "relative",
-            boxSizing: "border-box",
-            aspectRatio: "1/1"
-          }}
-          className="board-square"
-        >
-          <span style={{ fontSize: "0.85em" }}>{label}</span>
-          <div style={{
-            position: "absolute",
-            bottom: 2,
-            left: "5%",
-            fontSize: "1.2em",
-            width: "90%",
-            display: "flex",
-            justifyContent: "space-between"
-          }}>
-            {/* Players */}
-            <span>{p1}</span>
-            <span>{p2}</span>
-          </div>
-        </div>
-      );
-    }
-    return squares;
+    return (
+      <div style={boardStyle()}>
+        {BOARD.map((sq, idx) => {
+          const p1 = positions[0] === idx ? "🟧" : "";
+          const p2 = positions[1] === idx ? (vsAI ? "🤖" : "🟩") : "";
+          let bg =
+            sq.type === "income"
+              ? COLORS.bgIncome
+              : sq.type === "expense"
+              ? COLORS.bgExpense
+              : sq.type === "shop"
+              ? COLORS.bgShop
+              : "var(--bg-secondary, #f8f9fa)";
+          return (
+            <div
+              key={idx}
+              className="board-square"
+              style={{
+                background: bg,
+                border: `1.5px solid var(--border-color,${COLORS.primary})`,
+                borderRadius: 10,
+                minHeight: 55,
+                position: "relative",
+                fontSize: 15,
+                fontWeight: "500",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "6px 3px",
+                margin: "0",
+                textAlign: "center"
+              }}
+            >
+              <span style={{ fontWeight: "bold", fontSize: 17 }}>{sq.label}</span>
+              <span style={{ fontSize: 13, color: "#888" }}>{sq.info}</span>
+              <div style={{
+                position: "absolute",
+                left: 7,
+                top: 5,
+                fontSize: 15
+              }}>{p1}</div>
+              <div style={{
+                position: "absolute",
+                right: 7,
+                top: 5,
+                fontSize: 15
+              }}>{p2}</div>
+            </div>
+          );
+        })}
+      </div>
+    );
   }
 
-  // Responsive grid: 6 columns for board
-  function boardGridStyle() {
+  function boardStyle() {
+    // Single row board, responsive
+    const isMobile = window.innerWidth < 600;
     return {
       display: "grid",
-      gridTemplateColumns: "repeat(6, minmax(32px, 1fr))",
-      gap: 4,
-      maxWidth: 400,
+      gridTemplateColumns: `repeat(${BOARD_LENGTH}, minmax(48px, 1fr))`,
+      gap: isMobile ? 4 : 8,
+      maxWidth: isMobile ? 340 : 680,
       margin: "0 auto",
       background: "var(--bg-secondary, #f8f9fa)",
       borderRadius: 16,
-      padding: 8,
-      boxShadow: "0 2px 12px rgba(0,0,0,0.07)"
+      padding: isMobile ? 6 : 14,
+      overflowX: isMobile ? "scroll" : "visible",
+      boxShadow: "0 2px 10px #aaa1"
     };
   }
 
-  // Responsive: text sizing & controls
+  // Responsive ui
   const isMobile = window.innerWidth < 600;
+
+  // Helpers to display savings & items
+  function renderItemSummary(p) {
+    return items[p].length
+      ? (
+        <span style={{ fontSize: 13, color: COLORS.primary }}>
+          —
+          {items[p]
+            .reduce((acc, x) => (acc[x] = (acc[x] || 0) + 1, acc), {})
+            && Object.entries(
+              items[p].reduce((acc, x) => (acc[x] = (acc[x] || 0) + 1, acc), {})
+            ).map(([itm, cnt]) =>
+              <span key={itm} style={{marginLeft: 2}}>{itm}×{cnt} </span>
+            )}
+        </span>
+      )
+      : <span style={{ fontSize: 12, color: "#ccc" }}>—</span>;
+  }
 
   return (
     <div className="App">
@@ -235,29 +320,20 @@ function App() {
         >
           {theme === "light" ? "🌙 Dark" : "☀️ Light"}
         </button>
+        <h1 style={{ color: COLORS.primary, margin: "14px 0 8px" }}>Kid$mart</h1>
+        <div style={{
+          color: COLORS.secondary, fontSize: isMobile ? 16 : 18,
+          marginBottom: 8, fontWeight: 500
+        }}>{message}</div>
 
-        <div>
-          <h1 style={{ color: COLORS.primary, margin: "14px 0 6px" }}>Snake and Dice</h1>
-          <div style={{
-            color: COLORS.secondary,
-            fontSize: isMobile ? 16 : 18,
-            marginBottom: 8,
-            fontWeight: 500
-          }}>
-            {message}
-          </div>
-        </div>
-
-        {/* Mode Switch */}
-        <div style={{ margin: "8px 0 16px" }}>
+        {/* Mode selection */}
+        <div style={{ margin: "8px 0 14px" }}>
           <button
             style={{
               background: vsAI ? COLORS.secondary : COLORS.primary,
               color: "#fff",
-              borderRadius: 8,
-              border: "none",
-              marginRight: 6,
-              fontWeight: "600",
+              borderRadius: 8, border: "none",
+              marginRight: 6, fontWeight: "600",
               padding: isMobile ? "6px 16px" : "8px 22px",
               cursor: "pointer",
               boxShadow: vsAI ? "none" : "0 2px 8px #007bff22",
@@ -265,16 +341,12 @@ function App() {
             }}
             onClick={startTwoPlayerMode}
             disabled={!vsAI}
-          >
-            2 Player
-          </button>
+          >2 Player</button>
           <button
             style={{
               background: vsAI ? COLORS.primary : COLORS.secondary,
-              color: "#fff",
-              borderRadius: 8,
-              border: "none",
-              fontWeight: "600",
+              color: "#fff", borderRadius: 8,
+              border: "none", fontWeight: "600",
               padding: isMobile ? "6px 16px" : "8px 22px",
               cursor: "pointer",
               boxShadow: vsAI ? "0 2px 8px #28a74544" : "none",
@@ -282,69 +354,53 @@ function App() {
             }}
             onClick={startSoloMode}
             disabled={vsAI}
-          >
-            Solo
-          </button>
+          >Solo</button>
         </div>
 
-        {/* Game Board */}
-        <div style={{ margin: "0 0 10px" }}>
-          <div style={boardGridStyle()}>{renderBoard()}</div>
+        {/* Main board */}
+        <div style={{ margin: "0 0 9px" }}>
+          {renderBoard()}
         </div>
 
-        {/* Info and Controls */}
+        {/* Info: Money, Items, Controls */}
         <div style={{
-          maxWidth: 420,
-          margin: "0 auto 18px",
-          display: "flex",
-          flexDirection: isMobile ? "column" : "row",
-          alignItems: "center",
-          gap: 16,
-          justifyContent: "center"
+          maxWidth: 555, margin: "0 auto 12px",
+          display: "flex", flexDirection: isMobile ? "column" : "row",
+          alignItems: "center", gap: 18, justifyContent: "center"
         }}>
-
           <div style={{
             background: "var(--bg-secondary,#f8f9fa)",
-            padding: isMobile ? "8px 13px" : "10px 30px",
-            borderRadius: 14,
-            boxShadow: "0 1px 7px #0001",
-            textAlign: "center",
-            minWidth: 110,
-            fontSize: isMobile ? 15 : 17
+            padding: isMobile ? "9px 9px" : "12px 32px",
+            borderRadius: 12, boxShadow: "0 1px 6px #0001",
+            textAlign: "center", minWidth: 110, fontSize: isMobile ? 15 : 17
           }}>
             <div>
               <span role="img" aria-label="P1">🟧</span>
-              Player 1: <b>{scores[0]}</b>
+              Player 1: <b>${money[0]}</b> {renderItemSummary(0)}
             </div>
             <div>
               <span role="img" aria-label={vsAI ? "AI" : "P2"}>
                 {vsAI ? "🤖" : "🟩"}
               </span>
-              {vsAI ? "AI" : "Player 2"}: <b>{scores[1]}</b>
+              {vsAI ? "KidBot" : "Player 2"}: <b>${money[1]}</b> {renderItemSummary(1)}
             </div>
           </div>
 
           <div style={{
-            display: "flex",
-            flexDirection: isMobile ? "row" : "column",
-            gap: 10,
-            alignItems: "center",
-            justifyContent: "center"
+            display: "flex", flexDirection: isMobile ? "row" : "column",
+            gap: 10, alignItems: "center", justifyContent: "center"
           }}>
             <button
               className="roll-btn"
               style={{
                 background: gameOver ? COLORS.secondary : COLORS.accent,
-                color: "#fff",
-                border: "none",
-                borderRadius: 10,
-                fontWeight: "bold",
-                fontSize: isMobile ? 17 : 20,
-                padding: isMobile ? "8px 34px" : "12px 50px",
-                cursor: gameOver ? "not-allowed" : "pointer",
+                color: "#fff", border: "none", borderRadius: 10,
+                fontWeight: "bold", fontSize: isMobile ? 17 : 20,
+                padding: isMobile ? "8px 26px" : "13px 45px",
+                cursor: gameOver || (vsAI && turn === 1) ? "not-allowed" : "pointer",
                 boxShadow: "0 2px 7px #28a74533"
               }}
-              onClick={rollDice}
+              onClick={handleRoll}
               disabled={gameOver || (vsAI && turn === 1)}
             >
               {gameOver
@@ -352,73 +408,66 @@ function App() {
                 : turn === 0
                   ? `Roll Dice${vsAI ? "" : " (P1)"}`
                   : vsAI
-                    ? "AI is thinking..."
+                    ? "KidBot is moving..."
                     : "Roll Dice (P2)"}
             </button>
             <button
               className="reset-btn"
               style={{
                 background: COLORS.secondary,
-                color: "#fff",
-                border: "none",
-                borderRadius: 10,
-                fontWeight: "bold",
+                color: "#fff", border: "none",
+                borderRadius: 10, fontWeight: "bold",
                 fontSize: isMobile ? 15 : 17,
-                padding: isMobile ? "7px 16px" : "10px 22px",
+                padding: isMobile ? "7px 14px" : "10px 22px",
                 marginLeft: isMobile ? 12 : 0,
                 marginTop: isMobile ? 0 : 10,
                 cursor: "pointer"
               }}
               onClick={resetGame}
-            >
-              Reset
-            </button>
+            >Reset</button>
           </div>
         </div>
 
-        {/* Dice, Turn & State */}
+        {/* Dice and Turn Display */}
         <div style={{
-          fontSize: isMobile ? 18 : 23,
+          fontSize: isMobile ? 17 : 21,
           margin: "0 0 10px",
           color: COLORS.accent,
           fontWeight: 600,
-          minHeight: 32
+          minHeight: 28
         }}>
           {dice && !gameOver &&
             <span>{`Dice: ${"🎲".repeat(dice)} (${dice})`}</span>
           }
         </div>
         <div style={{
-          fontSize: isMobile ? 16 : 19,
-          color: COLORS.primary,
-          marginBottom: 10,
-          fontWeight: 500
+          fontSize: isMobile ? 14 : 17,
+          color: COLORS.primary, marginBottom: 8, fontWeight: 500
         }}>
           {!gameOver ? (
             <>
               {turn === 0
                 ? "Player 1's Turn 🟧"
-                : (vsAI ? "AI's Turn 🤖" : "Player 2's Turn 🟩")}
+                : (vsAI ? "KidBot's Turn 🤖" : "Player 2's Turn 🟩")}
             </>
           ) : (
             <span>
-              {positions[0] === BOARD_SIZE
-                ? "Player 1 Wins! 🟧"
-                : positions[1] === BOARD_SIZE
-                  ? (vsAI ? "AI Wins! 🤖" : "Player 2 Wins! 🟩")
-                  : "Game Over"}
+              Game complete! {money[0] > money[1]
+                ? "Player 1 Wins 🟧"
+                : money[1] > money[0]
+                  ? (vsAI ? "KidBot Wins 🤖" : "Player 2 Wins 🟩")
+                  : "It's a Tie! 🥇"}
             </span>
           )}
         </div>
         <div style={{
-          marginTop: 10,
-          color: "var(--text-secondary,#888)",
-          fontSize: isMobile ? 13 : 14
+          marginTop: 10, color: "var(--text-secondary,#888)",
+          fontSize: isMobile ? 12 : 14
         }}>
-          <span>
-            Reach square {BOARD_SIZE} exactly to win.<br />
-            Ladders: ⬆️, Snakes: 🐍. Overshoot? You stay in place!
-          </span>
+          Move around the board, earn or spend money, buy simple items.
+          <br />
+          Laps: Complete {WINNING_LAPS} laps! Highest savings wins.<br />
+          <span style={{fontSize: 12}}>Business fun for kids — learn about saving & spending!</span>
         </div>
       </header>
     </div>
